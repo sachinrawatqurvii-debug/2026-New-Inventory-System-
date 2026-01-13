@@ -9,8 +9,10 @@ const BASE_URL = "https://return-inventory-backend.onrender.com";
 const ProductsCopy = () => {
   const productsData = useGlobalContext();
   const [sessionStart, setSessionStart] = useState(false);
-  const { getResponseFromOrders,coordsData ,googleSheetColors } = useGlobalContext();
+  const { getResponseFromOrders, coordsData, googleSheetColors } = useGlobalContext();
   const [ordersRecord, setOrdersRecord] = useState([]);
+  const [mappedOrderId, setMappedOrderId] = useState([]);
+  const [isInvalid, setIsInvalid] = useState(false);
   const [sessionId, setSessionId] = useState(
     localStorage.getItem("sessionId") || null
   );
@@ -24,26 +26,119 @@ const ProductsCopy = () => {
     quantity: 1,
   });
 
+  const { styleDetails } = useGlobalContext();
+  console.log("style type", styleDetails)
+
   const fetchMached = productsData.productsData.find(
     (p) => p.style_code === Number(!orderId ? formData?.styleNumber : ordersRecord?.style_number)
   );
 
+  const fetchMappedOrderIdWithRackSpace = async (STYLE_NUMBER) => {
+    try {
+      // Parse the style number
+      const match = STYLE_NUMBER.match(/(\D*)(\d+)(\D*)/);
+      if (!match) {
+        setIsInvalid(true);
+        return "Not Found";
+      }
+
+      const prefix = match[1] || "";
+      const number = parseInt(match[2], 10);
+      const suffix = match[3] || "";
+
+      // Function to try fetching a specific style number
+      const tryFetch = async (styleNum) => {
+        try {
+          const response = await axios.get(
+            `https://raw-material-backend.onrender.com/api/v1/order-id-mapping/get-mapped-style-id?style_number=${styleNum}`
+          );
+
+          const data = response.data.data?.data;
+          if (data && Object.keys(data).length > 0) {
+            return data;
+          }
+          return null;
+        } catch (error) {
+          if (error.response && error.response.status === 404) {
+            return null;
+          }
+          console.log(`Error fetching ${styleNum}:`, error.message);
+          return null;
+        }
+      };
+
+      // Try original style number first
+      let data = await tryFetch(STYLE_NUMBER);
+      if (data) {
+        setMappedOrderId(data);
+        setIsInvalid(false);
+        console.log("data found for original", data);
+        return data;
+      }
+
+      // Check forward 100 numbers
+      for (let i = 1; i <= 100; i++) {
+        const forwardNumber = number + i;
+        const forwardStyleNumber = `${prefix}${forwardNumber}${suffix}`;
+
+        data = await tryFetch(forwardStyleNumber);
+        if (data) {
+          setMappedOrderId(data);
+          setIsInvalid(false);
+          console.log(`data found for ${forwardStyleNumber}`, data);
+          return data;
+        }
+      }
+
+      // Check backward 100 numbers
+      for (let i = 1; i <= 100; i++) {
+        const backwardNumber = number - i;
+        if (backwardNumber < 0) break;
+
+        const backwardStyleNumber = `${prefix}${backwardNumber}${suffix}`;
+
+        data = await tryFetch(backwardStyleNumber);
+        if (data) {
+          setMappedOrderId(data);
+          setIsInvalid(false);
+          console.log(`data found for ${backwardStyleNumber}`, data);
+          return data;
+        }
+      }
+
+      // If nothing found
+      setIsInvalid(true);
+      console.log(`No data found for ${STYLE_NUMBER} and surrounding 200 numbers`);
+      return "Not Found";
+
+    } catch (error) {
+      setIsInvalid(true);
+      console.log("Failed to fetch mapped order id rack details error :: ", error);
+      return "Not Found";
+    }
+  };
+  useEffect(() => {
+    if (formData.styleNumber?.toString().length >= 5) {
+      fetchMappedOrderIdWithRackSpace(formData.styleNumber)
+    }
+  }, [formData.styleNumber]);
 
   // ********************* co-ords rackSpace matching logics ************************
 
-   const matchedCoords = coordsData.find((co)=>(co.style1 === Number(formData.styleNumber) || co.style1 === Number(ordersRecord?.style_number)) 
-  || (co.style2 === Number(formData.styleNumber) || co.style2 === Number(ordersRecord?.style_number)) 
-  || (co.coordstyle === Number(formData.styleNumber) || co.coordstyle === Number(ordersRecord?.style_number))
-);
+  const matchedCoords = coordsData.find((co) => (co.style1 === Number(formData.styleNumber) || co.style1 === Number(ordersRecord?.style_number))
+    || (co.style2 === Number(formData.styleNumber) || co.style2 === Number(ordersRecord?.style_number))
+    || (co.coordstyle === Number(formData.styleNumber) || co.coordstyle === Number(ordersRecord?.style_number))
+  );
 
 
-// *************** coords article type matching logics ***********************
-const coordsArticleTypeMatch = (styleNumber)=>{
- return googleSheetColors.find((d)=>d.stylenumber== styleNumber)?.styletype
-}
-  
+  // *************** coords article type matching logics ***********************
+  const coordsArticleTypeMatch = (styleNumber) => {
+    return googleSheetColors.find((d) => d.stylenumber == styleNumber)?.styletype
+  }
 
-  if(matchedCoords){    console.log("Matched Coords Data",matchedCoords);
+
+  if (matchedCoords) {
+    console.log("Matched Coords Data", matchedCoords);
   }
   // finding valid rackSpace
 
@@ -103,6 +198,10 @@ const coordsArticleTypeMatch = (styleNumber)=>{
 
     return null;
   }
+
+
+
+
 
   const [editingIndex, setEditingIndex] = useState(null); // Track which product is being edited
   const styleNumberRef = useRef(null);
@@ -175,140 +274,82 @@ const coordsArticleTypeMatch = (styleNumber)=>{
   };
 
 
-  // const handleSubmit = (e) => {
-  //   e.preventDefault();
-  // let newProduct=[];
-
-  //   if((ordersRecord?.style_number?.toString().startsWith("30") && ordersRecord?.style_number?.toString()?.length ===5 || formData?.styleNumber?.toString().startsWith("30") && formData?.styleNumber?.toString()?.length ===5)){
-
-  //       let style1  = {
-  //     styleNumber: matchedCoords?.style1,
-  //     size: formData.size.trim() || ordersRecord?.size,
-  //     quantity: parseInt(formData.quantity) || 0,
-  //     dateAdded: new Date().toISOString(),
-  //     // rackSpace: result?.rackSpace || "Not found",
-  //     rackSpace: matchedCoords ? matchedCoords.rackspace : result ? result.rackSpace : "Not found",
-  //     orderId: orderId || "_",
-  //   };
-  //    let style2  = {
-  //     styleNumber: matchedCoords?.style2,
-  //     size: formData.size.trim() || ordersRecord?.size,
-  //     quantity: parseInt(formData.quantity) || 0,
-  //     dateAdded: new Date().toISOString(),
-  //     // rackSpace: result?.rackSpace || "Not found",
-  //     rackSpace: matchedCoords ? matchedCoords.rackspace : result ? result.rackSpace : "Not found",
-  //     orderId: orderId || "_",
-  //   };
-  //     newProduct = [style1,style2];
-
-  //   }
-  //    newProduct = {
-  //     styleNumber: formData.styleNumber.trim() || ordersRecord?.style_number,
-  //     size: formData.size.trim() || ordersRecord?.size,
-  //     quantity: parseInt(formData.quantity) || 0,
-  //     dateAdded: new Date().toISOString(),
-  //     // rackSpace: result?.rackSpace || "Not found",
-  //     rackSpace: matchedCoords ? matchedCoords.rackspace : result ? result.rackSpace : "Not found",
-  //     orderId: orderId || "N/A",
-  //   };
-
-  //   let updatedProducts;
-  //   if (editingIndex !== null) {
-  //     // Update existing product
-  //     updatedProducts = [...products];
-  //     updatedProducts[editingIndex] = newProduct;
-  //     setEditingIndex(null); // Reset editing state
-  //   } else {
-  //     // Add new product
-  //     updatedProducts = [newProduct, ...products];
-  //   }
-
-  //   localStorage.setItem("products", JSON.stringify(updatedProducts));
-  //   setProducts(updatedProducts);
-
-
-  //   fetchOrderIdAndDeleteRecordFromPressTable();
-
-
-  //   setFormData({ styleNumber: "", size: "", quantity: 1 });
-
-  //   styleNumberRef.current.focus();
-  // };
 
   const handleSubmit = (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  const baseStyleNumber =
-    formData?.styleNumber?.trim() || ordersRecord?.style_number;
+    const baseStyleNumber =
+      formData?.styleNumber?.trim() || ordersRecord?.style_number;
 
-  const size =
-    formData?.size?.trim() || ordersRecord?.size;
+    const size =
+      formData?.size?.trim() || ordersRecord?.size;
 
-  const quantity = parseInt(formData.quantity) || 0;
+    const quantity = parseInt(formData.quantity) || 0;
 
-  const rackSpace =
-    matchedCoords?.rackspace ||
-    result?.rackSpace ||
-    "Not found";
+    const rackSpace =
+      matchedCoords?.rackspace ||
+      mappedOrderId[0]?.rack_space ||
+      "Not found";
 
-  const commonPayload = {
-    size,
-    quantity,
-    dateAdded: new Date().toISOString(),
-    rackSpace,
-    orderId: orderId || "-",
-    parentStyleNumber: matchedCoords ? matchedCoords.coordstyle : null,
+    const commonPayload = {
+      size,
+      quantity,
+      dateAdded: new Date().toISOString(),
+      rackSpace,
+      orderId: orderId || "-",
+      parentStyleNumber: matchedCoords ? matchedCoords.coordstyle : null,
+    };
+
+    let newProducts = [];
+
+    /** CASE 1: Co-ords style → add both child styles */
+    const isCoordsStyle =
+      baseStyleNumber?.toString().startsWith("30") &&
+      baseStyleNumber?.toString().length === 5 &&
+      matchedCoords?.style1 &&
+      matchedCoords?.style2;
+
+    if (isCoordsStyle) {
+      newProducts = [
+        {
+          styleNumber: matchedCoords.style1,
+          ...commonPayload,
+        },
+        {
+          styleNumber: matchedCoords.style2,
+          ...commonPayload,
+        },
+      ];
+    }
+    /** CASE 2: Normal single style */
+    else {
+      newProducts = [
+        {
+          styleNumber: baseStyleNumber,
+          ...commonPayload,
+        },
+      ];
+    }
+
+    let updatedProducts;
+
+    if (editingIndex !== null) {
+      updatedProducts = [...products];
+      updatedProducts.splice(editingIndex, 1, ...newProducts);
+      setEditingIndex(null);
+    } else {
+      updatedProducts = [...newProducts, ...products];
+    }
+
+    localStorage.setItem("products", JSON.stringify(updatedProducts));
+    setProducts(updatedProducts);
+
+    fetchOrderIdAndDeleteRecordFromPressTable();
+
+    setFormData({ styleNumber: "", size: "", quantity: 1 });
+    setMappedOrderId([])
+    styleNumberRef.current.focus();
   };
-
-  let newProducts = [];
-
-  /** CASE 1: Co-ords style → add both child styles */
-  const isCoordsStyle =
-    baseStyleNumber?.toString().startsWith("30") &&
-    baseStyleNumber?.toString().length === 5 &&
-    matchedCoords?.style1 &&
-    matchedCoords?.style2;
-
-  if (isCoordsStyle) {
-    newProducts = [
-      {
-        styleNumber: matchedCoords.style1,
-        ...commonPayload,
-      },
-      {
-        styleNumber: matchedCoords.style2,
-        ...commonPayload,
-      },
-    ];
-  } 
-  /** CASE 2: Normal single style */
-  else {
-    newProducts = [
-      {
-        styleNumber: baseStyleNumber,
-        ...commonPayload,
-      },
-    ];
-  }
-
-  let updatedProducts;
-
-  if (editingIndex !== null) {
-    updatedProducts = [...products];
-    updatedProducts.splice(editingIndex, 1, ...newProducts);
-    setEditingIndex(null);
-  } else {
-    updatedProducts = [...newProducts, ...products];
-  }
-
-  localStorage.setItem("products", JSON.stringify(updatedProducts));
-  setProducts(updatedProducts);
-
-  fetchOrderIdAndDeleteRecordFromPressTable();
-
-  setFormData({ styleNumber: "", size: "", quantity: 1 });
-  styleNumberRef.current.focus();
-};
 
   const handleEdit = (index) => {
     const productToEdit = products[index];
@@ -350,7 +391,7 @@ const coordsArticleTypeMatch = (styleNumber)=>{
 
   const qrIdRef = useRef(null);
 
- 
+
 
   // ****************************// after 26-07-2025 code ************************
 
@@ -384,19 +425,7 @@ const coordsArticleTypeMatch = (styleNumber)=>{
     qrIdRef.current.focus();
   };
 
-  
 
- 
-
-  // 2. Auto-submit when ordersRecord is updated with valid data
-  // useEffect(() => {
-  //   if (ordersRecord?.style_number && ordersRecord?.size) {
-  //     handleSubmit({ preventDefault: () => {} }); // Mimic a form submit
-  //     // fetchOrderIdAndDeleteRecordFromPressTable();
-  //     setOrdersRecord({});
-  //     qrIdRef.current.focus();
-  //   }
-  // }, [ordersRecord]);
   return (
     <div className="max-w-4xl p-6 bg-white rounded-lg">
       <Session
@@ -458,10 +487,10 @@ const coordsArticleTypeMatch = (styleNumber)=>{
           <div className="flex-1">
             <div className="flex justify-end">
               <span
-                className={`${(result?.rackSpace || matchedCoords?.rackspace ) ? "block" : "hidden"
+                className={`${mappedOrderId[0]?.rack_space ? "block" : "hidden"
                   } bg-yellow-200 py-2 px-4 rounded-full mb-2 `}
               >
-                Rack Space:  {matchedCoords ? matchedCoords.rackspace : result ? result.rackSpace : "Not found"}
+                Rack Space: {mappedOrderId[0]?.rack_space ? mappedOrderId[0]?.rack_space : "Not found"}
               </span>
             </div>
             <label
@@ -469,6 +498,11 @@ const coordsArticleTypeMatch = (styleNumber)=>{
               className=" text-sm font-medium text-gray-700 items-center mb-2  flex justify-between"
             >
               Style Number *  : <h2 className="font-bold text-green-800 bg-green-200 p-2 rounded-md shadow "> Total Added Products : {products.length}</h2>
+              <div className="flex gap-2 items-center">
+                {(formData.styleNumber?.toString().length === 5 || ordersRecord?.style_number?.toString().length === 5) && (
+                  <p className="py-3 px-4 bg-red-100 text-red-900 rounded font-bold ">  {styleDetails[(formData.styleNumber) || (ordersRecord?.style_number)]?.style_type} </p>
+                )}
+              </div>
             </label>
 
             <input
@@ -488,65 +522,69 @@ const coordsArticleTypeMatch = (styleNumber)=>{
               placeholder="Style #"
             />
           </div>
-            {/* ********************* coords split logics ************************ */}
-        {(ordersRecord?.style_number?.toString().startsWith("30") && ordersRecord?.style_number?.toString()?.length ===5 || formData?.styleNumber?.toString().startsWith("30") && formData?.styleNumber?.toString()?.length ===5) && (
-          <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded">
-            {/* <div> <input type="checkbox" name="" id="" /> </div> */}
-           <div className="grid grid-cols-3 gap-1">
-            <p>Style 1 : {matchedCoords.style1}</p>
-            <p>Rack Space : {matchedCoords.rackspace}</p>
-            <p>Article Type : {coordsArticleTypeMatch(matchedCoords?.style1)}</p>
-            <p>Style 2 : {matchedCoords.style2}</p>
-            <p>Rack Space : {matchedCoords.rackspace}</p>
-            <p>Article Type : {coordsArticleTypeMatch(matchedCoords?.style2)}</p>
-           </div>
-          </div>
-        )}
+          {/* ********************* coords split logics ************************ */}
+          {(ordersRecord?.style_number?.toString().startsWith("30") && ordersRecord?.style_number?.toString()?.length === 5 || formData?.styleNumber?.toString().startsWith("30") && formData?.styleNumber?.toString()?.length === 5) && (
+            <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded">
+              {/* <div> <input type="checkbox" name="" id="" /> </div> */}
+              <div className="grid grid-cols-3 gap-1">
+                <p>Style 1 : {matchedCoords.style1}</p>
+                <p>Rack Space : {matchedCoords.rackspace}</p>
+                <p>Article Type : {coordsArticleTypeMatch(matchedCoords?.style1)}</p>
+                <p>Style 2 : {matchedCoords.style2}</p>
+                <p>Rack Space : {matchedCoords.rackspace}</p>
+                <p>Article Type : {coordsArticleTypeMatch(matchedCoords?.style2)}</p>
+              </div>
+            </div>
+          )}
 
-          <Select
-            ref={sizeRef}
-            isDisabled={!sessionStart}
-            options={[
-              { label: "XXS", value: "XXS" },
-              { label: "XS", value: "XS" },
-              { label: "S", value: "S" },
-              { label: "M", value: "M" },
-              { label: "L", value: "L" },
-              { label: "XL", value: "XL" },
-              { label: "2XL", value: "2XL" },
-              { label: "3XL", value: "3XL" },
-              { label: "4XL", value: "4XL" },
-              { label: "5XL", value: "5XL" },
-            ]}
-            menuIsOpen={isMenuOpen}
-            onMenuClose={() => setIsMenuOpen(false)}
-            value={
-              formData.size
-                ? { label: formData.size, value: formData.size }
-                : ordersRecord?.size
-                  ? { label: ordersRecord.size, value: ordersRecord.size }
-                  : null
-            }
-            onChange={(selectedOption) => {
-              setFormData((prev) => ({
-                ...prev,
-                size: selectedOption.value,
-              }));
-              setAutoSubmitOnSizeChange(true);
-            }}
-            styles={{
-              menu: (provided) => ({
-                ...provided,
-                maxHeight: "none",
-              }),
-              menuList: (provided) => ({
-                ...provided,
-                maxHeight: "none",
-              }),
-            }}
-          />  
+          {
+            mappedOrderId[0]?.rack_space && (
+              <Select
+                ref={sizeRef}
+                isDisabled={!sessionStart}
+                options={[
+                  { label: "XXS", value: "XXS" },
+                  { label: "XS", value: "XS" },
+                  { label: "S", value: "S" },
+                  { label: "M", value: "M" },
+                  { label: "L", value: "L" },
+                  { label: "XL", value: "XL" },
+                  { label: "2XL", value: "2XL" },
+                  { label: "3XL", value: "3XL" },
+                  { label: "4XL", value: "4XL" },
+                  { label: "5XL", value: "5XL" },
+                ]}
+                menuIsOpen={isMenuOpen}
+                onMenuClose={() => setIsMenuOpen(false)}
+                value={
+                  formData.size
+                    ? { label: formData.size, value: formData.size }
+                    : ordersRecord?.size
+                      ? { label: ordersRecord.size, value: ordersRecord.size }
+                      : null
+                }
+                onChange={(selectedOption) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    size: selectedOption.value,
+                  }));
+                  setAutoSubmitOnSizeChange(true);
+                }}
+                styles={{
+                  menu: (provided) => ({
+                    ...provided,
+                    maxHeight: "none",
+                  }),
+                  menuList: (provided) => ({
+                    ...provided,
+                    maxHeight: "none",
+                  }),
+                }}
+              />
+            )
+          }
 
-      
+
 
           {/* Quantity */}
           <div className="flex-1 ">
