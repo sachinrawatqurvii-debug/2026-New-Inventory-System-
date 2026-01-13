@@ -490,7 +490,9 @@ const ProductsCopy = () => {
                 className={`${mappedOrderId[0]?.rack_space ? "block" : "hidden"
                   } bg-yellow-200 py-2 px-4 rounded-full mb-2 `}
               >
-                Rack Space: {mappedOrderId[0]?.rack_space ? mappedOrderId[0]?.rack_space : "Not found"}
+                {/* Rack Space: {mappedOrderId[0]?.rack_space ? mappedOrderId[0]?.rack_space : (matchedCoords?.rackspace || "Not found")} */}
+                Rack Space: {matchedCoords?.rackSpace ? matchedCoords?.rackSpace : mappedOrderId[0]?.rack_space ? mappedOrderId[0]?.rack_space : "Not found"}
+
               </span>
             </div>
             <label
@@ -538,7 +540,7 @@ const ProductsCopy = () => {
           )}
 
           {
-            mappedOrderId[0]?.rack_space && (
+            (mappedOrderId[0]?.rack_space || matchedCoords?.rackspace) && (
               <Select
                 ref={sizeRef}
                 isDisabled={!sessionStart}
