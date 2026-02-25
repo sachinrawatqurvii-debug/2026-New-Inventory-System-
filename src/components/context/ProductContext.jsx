@@ -85,8 +85,6 @@ const ProductContextProvider = ({ children }) => {
       });
 
       setCoordsData(formattedData);
-      console.log("Coords Structured Data", formattedData);
-
     } catch (error) {
       console.error("Failed to fetch coords data :: ", error);
       setError(`Failed to fetch coords data :: ${error?.message}`);
@@ -132,7 +130,6 @@ const ProductContextProvider = ({ children }) => {
       });
 
       setGoogleSheetColors(formattedData);
-      console.log("Colors Structured Data", formattedData);
 
     } catch (error) {
       console.error("Failed to fetch colors data :: ", error);

@@ -8,6 +8,8 @@ import LabelGenerator from './components/LabelGenerator';
 import ProductsCopy from './components/ProductsCopy';
 import SessionId from './components/SessionId';
 import ScanAndViewProductImg from './components/ScanAndViewProductImg';
+import UploadRackSpace from './components/UploadRackSpace';
+import InventoryPage from './components/InventoryPage';
 
 const App = () => {
   return (
@@ -18,17 +20,16 @@ const App = () => {
           <div className="fixed left-0 top-0 bottom-0 z-10">
             <Navbar />
           </div>
-          
+
           {/* Scrollable content area */}
           <div className="flex-1 ml-64 pl-6 pr-6 overflow-y-auto">
             <Routes>
-              <Route path='/' element={<ProductsCopy/>} />
-              <Route path='/barcode-generation' element={<BarcodeGenerator/>} />
-              <Route path='/label-generation' element={<LabelGenerator/>} />
-              <Route path='/sessions' element={<SessionId/>} />
-              <Route path='/test' element={<ScanAndViewProductImg/>} />
-
-
+              <Route path="/" element={<InventoryPage />} />
+              <Route path="/barcode-generation" element={<BarcodeGenerator />} />
+              <Route path="/label-generation" element={<LabelGenerator />} />
+              <Route path="/sessions" element={<SessionId />} />
+              <Route path="/test" element={<ScanAndViewProductImg />} />
+              <Route path="/upload" element={<UploadRackSpace />} />
             </Routes>
           </div>
         </div>

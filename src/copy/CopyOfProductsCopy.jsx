@@ -97,9 +97,12 @@ const ProductsCopy = () => {
   const getAutoSelectedRack = (styleNumber) => {
     const styleNumStr = styleNumber?.toString();
     if (!styleNumStr) return 'Not found';
+
     const invalidRacks = ['default', "'default", 'virtual', "'virtual", ''];
+
     // Check if style exists in localStorage
     const styleRacks = localStorageData[styleNumStr];
+
     if (!styleRacks || Object.keys(styleRacks).length === 0) {
       // Style not found, search forward and backward
       return findNearestValidRack(styleNumStr);
@@ -331,45 +334,14 @@ const ProductsCopy = () => {
 
   // ****************************// after 26-07-2025 code ************************
 
-  // useEffect(() => {
-  //   const autoFetch = async () => {
-  //     if (
-  //       orderId?.length === 5 ||
-  //       orderId?.length === 6 ||
-  //       orderId?.length === 7 ||
-  //       orderId?.length === 8
-  //     ) {
-  //       try {
-  //         const response = await getResponseFromOrders(Number(orderId));
-  //         styleNumberRef.current.focus();
-  //         styleNumberRef.current.select();
-  //         setOrdersRecord(response);
-  //       } catch (error) {
-  //         console.error('Failed to fetch or process order', error);
-  //       }
-  //     }
-  //   };
-
-  //   autoFetch();
-  // }, [orderId]);
-
-  const latestRequestRef = useRef(0);
-
   useEffect(() => {
     const autoFetch = async () => {
-      if ([5, 6, 7, 8].includes(orderId?.length)) {
-        const requestId = ++latestRequestRef.current; // unique request id
-
+      if (orderId?.length === 5 || orderId?.length === 6) {
         try {
           const response = await getResponseFromOrders(Number(orderId));
-
-          // ✅ ignore old API responses
-          if (requestId !== latestRequestRef.current) return;
-
+          styleNumberRef.current.focus();
+          styleNumberRef.current.select();
           setOrdersRecord(response);
-
-          styleNumberRef.current?.focus();
-          styleNumberRef.current?.select();
         } catch (error) {
           console.error('Failed to fetch or process order', error);
         }
